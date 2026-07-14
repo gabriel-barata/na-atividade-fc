@@ -129,6 +129,13 @@
     display:flex;align-items:center;justify-content:center;color:var(--muted);}
   .listbtn.on{background:#E1F2E6;border-color:#4B9F63;color:#256B3A;}
   .listbtn.off{background:#F7D9D9;border-color:#C24949;color:#8A2E2E;}
+  .benchbtn{width:24px;height:24px;border-radius:7px;border:1px solid var(--line);
+    background:#fff;font-size:12px;cursor:pointer;flex:none;padding:0;
+    display:flex;align-items:center;justify-content:center;color:var(--muted);}
+  .benchbtn.on{background:#EDE3F7;border-color:var(--p500);color:var(--p700);}
+  .section-lbl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);font-weight:700;margin:10px 2px 6px;}
+  .p.bench{background:#F7F5FA;opacity:.85;}
   .p .name{flex:1 1 auto;min-width:0;width:100%;border:0;background:transparent;font-size:16px;
     font-weight:400;color:var(--ink);padding:3px 4px;border-radius:6px;letter-spacing:.02em;
     overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;}
@@ -175,6 +182,10 @@
     <div class="seg" id="teamCountSeg">
       <button data-tc="2">2 Times</button>
       <button data-tc="3" class="on">3 Times</button>
+    </div>
+    <div class="seg" id="formatSeg">
+      <button data-fmt="7" class="on">Fut7</button>
+      <button data-fmt="5">Fut5</button>
     </div>
     <button class="btn primary" id="autoBtn">⚖️ Auto-nivelar</button>
     <div class="balance" id="balanceBox">Equilíbrio: —</div>
@@ -241,12 +252,13 @@
 
   function freshState(roster){
     var id = 1, players = roster.map(function(p){
-      return {id:id++, name:p.name, skill:p.skill, pos:p.pos, num:p.num, team:'pool', inList:true};
+      return {id:id++, name:p.name, skill:p.skill, pos:p.pos, num:p.num, team:'pool', inList:true, bench:false};
     });
-    return {teamCount:3, nextId:id, players:players, teamNames:{A:'',B:'',C:''}, nextMatch:'19/07/2026'};
+    return {teamCount:3, maxPlayers:7, nextId:id, players:players, teamNames:{A:'',B:'',C:''}, nextMatch:'19/07/2026'};
   }
 
   function activeTeams(){ return state.teamCount===2 ? ['A','B'] : ['A','B','C']; }
+  function maxPerTeam(){ return state.maxPlayers===5 ? 5 : 7; }
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function skillColor(v){
@@ -284,7 +296,7 @@
     }).join('');
   }
 
-  function playerHTML(p){
+  function playerHTML(p, benched){
     var teams = activeTeams();
     var sc = skillColor(p.skill);
     var inList = p.inList!==false;
@@ -292,10 +304,14 @@
     teams.forEach(function(t){
       mv += '<button class="mv a'+t+(p.team===t?' on':'')+'" data-move="'+p.id+'" data-team="'+t+'" title="Time '+t+'">'+t+'</button>';
     });
-    return '<div class="p'+(inList?'':' off')+'" draggable="true" data-id="'+p.id+'">'+
+    var benchBtn = p.team!=='pool'
+      ? '<button class="benchbtn'+(p.bench?' on':'')+'" data-bench="'+p.id+'" title="'+(p.bench?'Tirar do banco':'Colocar no banco')+'">🪑</button>'
+      : '';
+    return '<div class="p'+(inList?'':' off')+(benched?' bench':'')+'" draggable="true" data-id="'+p.id+'">'+
       '<div class="p-top">'+
         '<span class="grip" draggable="false">⠿</span>'+
         '<button class="listbtn'+(inList?' on':' off')+'" data-list="'+p.id+'" title="Na lista pro próximo jogo">'+(inList?'✓':'✕')+'</button>'+
+        benchBtn+
         '<input class="name" draggable="false" data-name="'+p.id+'" value="'+esc(p.name)+'" spellcheck="false">'+
         '<input class="jnum" draggable="false" data-num="'+p.id+'" type="number" min="1" max="99" '+
           'value="'+(p.num||'')+'" title="Número da camisa" placeholder="Nº">'+
@@ -317,10 +333,18 @@
   }
 
   function teamStats(t){
-    var list = state.players.filter(function(p){return p.team===t;});
-    var sum=0; list.forEach(function(p){sum+=Number(p.skill)||0;});
-    var avg = list.length ? sum/list.length : 0;
-    return {list:list, avg:avg, count:list.length};
+    var all = state.players.filter(function(p){return p.team===t;});
+    var max = maxPerTeam();
+    var manualBench = all.filter(function(p){return p.bench;});
+    var eligible = all.filter(function(p){return !p.bench;}).slice().sort(function(a,b){
+      return (a.pos==='GOL'?0:1)-(b.pos==='GOL'?0:1);
+    });
+    var starters = eligible.slice(0, max);
+    var overflow = eligible.slice(max);
+    var bench = manualBench.concat(overflow);
+    var sum=0; starters.forEach(function(p){sum+=Number(p.skill)||0;});
+    var avg = starters.length ? sum/starters.length : 0;
+    return {all:all, starters:starters, bench:bench, list:starters, avg:avg, count:starters.length};
   }
 
   var PITCH_X = {GOL:0.08, LAT:0.27, ZAG:0.27, VOL:0.45, MEI:0.62, ATA:0.85};
@@ -358,10 +382,6 @@
     var teamsEl = document.getElementById('teams');
     teamsEl.className = 'teams' + (state.teamCount===3 ? ' three' : '');
 
-    // target hint
-    var total = state.players.length;
-    var target = Math.round(total/state.teamCount);
-
     // pool
     var pool = state.players.filter(function(p){return p.team==='pool';});
     document.getElementById('poolSub').textContent =
@@ -371,6 +391,7 @@
       : '<div class="empty">Todos escalados 🎉</div>';
 
     // teams
+    var max = maxPerTeam();
     teamsEl.innerHTML = teams.map(function(t){
       var s = teamStats(t);
       return '<div class="col" data-drop="'+t+'">'+
@@ -378,12 +399,15 @@
           '<div class="chip jersey" style="background:'+TEAM_COLOR[t]+';color:'+TEAM_TEXT[t]+'">'+t+'</div>'+
           '<div><div class="col-title">Time '+t+'</div>'+
           '<input class="nickname" data-nick="'+t+'" value="'+esc(state.teamNames[t]||'')+'" placeholder="apelido do time">'+
-          '<div class="col-sub">'+s.count+' de ~'+target+' jogadores</div></div>'+
+          '<div class="col-sub">'+s.count+' de '+max+' titulares'+(s.bench.length?' · '+s.bench.length+' no banco':'')+'</div></div>'+
           '<div class="avg"><div class="num">'+
             (s.count?s.avg.toFixed(1):'–')+'</div><div class="lbl">Média</div></div>'+
         '</div>'+
-        pitchHTML(s.list)+
-        (s.list.length ? sortByList(s.list).map(playerHTML).join('') : '<div class="empty">Arraste ou toque em '+t+' para escalar</div>')+
+        pitchHTML(s.starters)+
+        (s.starters.length ? sortByList(s.starters).map(function(p){return playerHTML(p,false);}).join('')
+          : (s.all.length ? '' : '<div class="empty">Arraste ou toque em '+t+' para escalar</div>'))+
+        (s.bench.length ? '<div class="section-lbl">Banco ('+s.bench.length+')</div>'+
+          sortByList(s.bench).map(function(p){return playerHTML(p,true);}).join('') : '')+
       '</div>';
     }).join('');
 
@@ -414,9 +438,17 @@
   /* ---------- mutations ---------- */
   function setTeamCount(n){
     state.teamCount = n;
-    if(n===2){ state.players.forEach(function(p){ if(p.team==='C') p.team='pool'; }); }
+    if(n===2){ state.players.forEach(function(p){ if(p.team==='C'){ p.team='pool'; p.bench=false; } }); }
     document.querySelectorAll('#teamCountSeg button').forEach(function(b){
       b.classList.toggle('on', Number(b.getAttribute('data-tc'))===n);
+    });
+    render(); save();
+  }
+
+  function setFormat(n){
+    state.maxPlayers = (n===5 ? 5 : 7);
+    document.querySelectorAll('#formatSeg button').forEach(function(b){
+      b.classList.toggle('on', Number(b.getAttribute('data-fmt'))===state.maxPlayers);
     });
     render(); save();
   }
@@ -431,7 +463,7 @@
 
   function autoBalance(){
     var teams = activeTeams();
-    state.players.forEach(function(p){p.team='pool';});
+    state.players.forEach(function(p){p.team='pool'; p.bench=false;});
     var buckets={}, sums={}; teams.forEach(function(t){buckets[t]=[];sums[t]=0;});
     var gks = state.players.filter(function(p){return p.pos==='GOL';}).sort(function(a,b){return b.skill-a.skill;});
     var rest = state.players.filter(function(p){return p.pos!=='GOL';});
@@ -459,8 +491,12 @@
     teams.forEach(function(t){
       var s=teamStats(t);
       lines.push('▪️ TIME '+t+'  (média '+(s.count?s.avg.toFixed(1):'-')+')');
-      s.list.forEach(function(p){ lines.push('  • '+p.name+' — '+POSMAP[p.pos].label+' ('+p.skill+')'); });
-      if(!s.list.length) lines.push('  (vazio)');
+      s.starters.forEach(function(p){ lines.push('  • '+p.name+' — '+POSMAP[p.pos].label+' ('+p.skill+')'); });
+      if(!s.starters.length) lines.push('  (vazio)');
+      if(s.bench.length){
+        lines.push('  Banco:');
+        s.bench.forEach(function(p){ lines.push('    • '+p.name+' — '+POSMAP[p.pos].label+' ('+p.skill+')'); });
+      }
       lines.push('');
     });
     var pool = state.players.filter(function(p){return p.team==='pool';});
@@ -486,7 +522,9 @@
         if(obj && obj.players && obj.players.length){
           if(!obj.nextId) obj.nextId = Math.max.apply(null,obj.players.map(function(p){return p.id||0;}))+1;
           if(obj.teamCount!==2) obj.teamCount=3;
-          state=obj; setTeamCount(state.teamCount); render(); save(); flash('Importado!');
+          if(obj.maxPlayers!==5 && obj.maxPlayers!==7) obj.maxPlayers=7;
+          obj.players.forEach(function(p){ if(p.bench===undefined) p.bench=false; });
+          state=obj; setTeamCount(state.teamCount); setFormat(state.maxPlayers); save(); flash('Importado!');
         } else flash('Arquivo inválido.');
       }catch(e){ flash('Não consegui ler o arquivo.'); }
     };
@@ -504,11 +542,13 @@
   document.addEventListener('click', function(e){
     var t=e.target;
     if(t.matches('[data-move]')){ var p=byId(+t.getAttribute('data-move'));
-      if(p){ p.team=t.getAttribute('data-team'); render(); save(); } }
+      if(p){ p.team=t.getAttribute('data-team'); if(p.team==='pool') p.bench=false; render(); save(); } }
     else if(t.matches('[data-del]')){ var id=+t.getAttribute('data-del');
       state.players=state.players.filter(function(x){return x.id!==id;}); render(); save(); }
     else if(t.matches('[data-list]')){ var p5=byId(+t.getAttribute('data-list'));
       if(p5){ p5.inList = p5.inList===false; render(); save(); } }
+    else if(t.matches('[data-bench]')){ var p6=byId(+t.getAttribute('data-bench'));
+      if(p6){ p6.bench = !p6.bench; render(); save(); } }
   });
   document.addEventListener('input', function(e){
     var t=e.target;
@@ -592,12 +632,15 @@
     var col=e.target.closest && e.target.closest('[data-drop]');
     if(!col) return; e.preventDefault();
     var id=dragId; if(id==null){ try{ id=+e.dataTransfer.getData('text/plain'); }catch(_){} }
-    var p=byId(id); if(p){ p.team=col.getAttribute('data-drop'); render(); save(); }
+    var p=byId(id); if(p){ p.team=col.getAttribute('data-drop'); if(p.team==='pool') p.bench=false; render(); save(); }
   });
 
   // toolbar
   document.getElementById('teamCountSeg').addEventListener('click', function(e){
     var b=e.target.closest('button'); if(b) setTeamCount(+b.getAttribute('data-tc'));
+  });
+  document.getElementById('formatSeg').addEventListener('click', function(e){
+    var b=e.target.closest('button'); if(b) setFormat(+b.getAttribute('data-fmt'));
   });
   document.getElementById('autoBtn').addEventListener('click', autoBalance);
   document.getElementById('copyBtn').addEventListener('click', copyTeams);
@@ -605,7 +648,7 @@
   document.getElementById('importBtn').addEventListener('click', function(){ document.getElementById('importFile').click(); });
   document.getElementById('importFile').addEventListener('change', function(e){ if(e.target.files[0]) importJSON(e.target.files[0]); e.target.value=''; });
   document.getElementById('resetBtn').addEventListener('click', function(){
-    state.players.forEach(function(p){p.team='pool';}); render(); save();
+    state.players.forEach(function(p){p.team='pool'; p.bench=false;}); render(); save();
   });
   document.getElementById('addBtn').addEventListener('click', function(){
     var el=document.getElementById('addName'); addPlayer(el.value); el.value=''; el.focus();
@@ -617,9 +660,11 @@
   load(function(){
     if(!state.teamNames) state.teamNames={A:'',B:'',C:''};
     if(!state.nextMatch) state.nextMatch='19/07/2026';
-    state.players.forEach(function(p){ if(p.inList===undefined) p.inList=true; });
+    if(state.maxPlayers!==5 && state.maxPlayers!==7) state.maxPlayers=7;
+    state.players.forEach(function(p){ if(p.inList===undefined) p.inList=true; if(p.bench===undefined) p.bench=false; });
     document.getElementById('nextMatch').value=state.nextMatch;
-    setTeamCount(state.teamCount); render();
+    setTeamCount(state.teamCount);
+    setFormat(state.maxPlayers);
   });
 })();
 </script>
