@@ -1,0 +1,22 @@
+[
+  {"name": "Adler", "num": 19, "pos": "ATA", "skill": 86},
+  {"name": "Adams", "num": 15, "pos": "MEI", "skill": 82},
+  {"name": "Bessa", "num": 8, "pos": "MEI", "skill": 83},
+  {"name": "Bob", "num": 16, "pos": "VOL", "skill": 84},
+  {"name": "Danilo", "num": 10, "pos": "ATA", "skill": 85},
+  {"name": "Felipe", "num": 26, "pos": "ZAG", "skill": 84},
+  {"name": "Gabriel Prado", "num": 5, "pos": "LAT", "skill": 84},
+  {"name": "Gabriel Peidão", "num": 22, "pos": "MEI", "skill": 83},
+  {"name": "Garcia", "num": 2, "pos": "LAT", "skill": 84},
+  {"name": "Ícaro", "num": 9, "pos": "MEI", "skill": 84},
+  {"name": "Salim", "num": 7, "pos": "ATA", "skill": 83},
+  {"name": "Marcelo", "num": 77, "pos": "ATA", "skill": 83},
+  {"name": "Matheus", "num": 11, "pos": "ATA", "skill": 81},
+  {"name": "Michael", "num": 1, "pos": "ATA", "skill": 86},
+  {"name": "Wagner", "num": 13, "pos": "MEI", "skill": 83},
+  {"name": "Tio Daniel", "num": 33, "pos": "ATA", "skill": 86},
+
+  {"name": "Jacob", "num": 99, "pos": "MEI", "skill": 80},
+  {"name": "Gabriel Chapéu", "num": 98, "pos": "ATA", "skill": 84},
+  {"name": "Bruno", "num": 97, "pos": "GOL", "skill": 88}
+]

@@ -31,12 +31,15 @@
     box-shadow:0 2px 8px rgba(0,0,0,.35);}
   h1{margin:0;font-size:26px;font-weight:400;letter-spacing:.5px;text-transform:uppercase;}
   .tagline{margin:4px 0 0;font-size:12.5px;color:var(--p100);max-width:640px;}
-  .nextmatch{display:flex;align-items:center;gap:8px;margin-left:auto;text-align:right;flex:none;}
+  .nextmatch{display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-left:auto;text-align:right;flex:none;}
   .nextmatch .lbl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--p100);font-weight:700;}
   .nextmatch input{font-family:'Staatliches',sans-serif;font-size:17px;letter-spacing:.03em;
     background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;
     border-radius:8px;padding:5px 8px;width:120px;text-align:right;}
   .nextmatch input:focus{outline:2px solid #fff;outline-offset:0;}
+  .listcount{font-size:11px;font-weight:700;color:#fff;background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:3px 9px;white-space:nowrap;}
+  .listcount b{font-family:'Staatliches',sans-serif;font-size:14px;letter-spacing:.02em;}
 
   /* toolbar */
   .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;
@@ -114,12 +117,18 @@
   /* player card */
   .p{display:flex;flex-direction:column;gap:6px;background:var(--branco);
     border:1px solid var(--line);border-radius:11px;padding:8px 9px;margin-bottom:7px;
-    cursor:grab;}
+    cursor:grab;transition:background .12s,border-color .12s;}
   .p:last-child{margin-bottom:0;}
   .p.dragging{opacity:.4;}
+  .p.off{background:#FBEAEA;border-color:#E3B3B3;}
   .p-top{display:flex;align-items:center;gap:8px;}
   .p-bot{display:flex;align-items:center;gap:8px;}
   .grip{color:var(--p300);font-size:15px;flex:none;cursor:grab;user-select:none;}
+  .listbtn{width:24px;height:24px;border-radius:7px;border:1px solid var(--line);
+    background:#fff;font-size:12px;font-weight:800;cursor:pointer;flex:none;padding:0;
+    display:flex;align-items:center;justify-content:center;color:var(--muted);}
+  .listbtn.on{background:#E1F2E6;border-color:#4B9F63;color:#256B3A;}
+  .listbtn.off{background:#F7D9D9;border-color:#C24949;color:#8A2E2E;}
   .p .name{flex:1 1 auto;min-width:0;width:100%;border:0;background:transparent;font-size:16px;
     font-weight:400;color:var(--ink);padding:3px 4px;border-radius:6px;letter-spacing:.02em;
     overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;}
@@ -157,6 +166,7 @@
   <div class="nextmatch">
     <div class="lbl">Próximo Fut</div>
     <input id="nextMatch" type="text" value="19/07/2026" placeholder="dd/mm/aaaa">
+    <div class="listcount" id="listCount">— na lista</div>
   </div>
 </header>
 
@@ -225,17 +235,14 @@
     {label:'DEF', positions:['ZAG','LAT']},
     {label:'GOL', positions:['GOL']}
   ];
-  var DEFAULT_NAMES = ['Garcia','Bob','Danilo','Marcelo','Gabriel Prado','Gabriel Peidão',
-    'Gabriel Chapéu','Ícaro','Bruno','Matheus','Michael','Wagner','Jacob','Adler'];
-
+  var ROSTER_URL = 'data/players.json';
   var STORE_KEY = 'pelada:escalacao:v1';
   var state = null;
 
-  function freshState(){
-    var id = 1, players = DEFAULT_NAMES.map(function(n){
-      return {id:id++, name:n, skill:50, pos:'MEI', team:'pool'};
+  function freshState(roster){
+    var id = 1, players = roster.map(function(p){
+      return {id:id++, name:p.name, skill:p.skill, pos:p.pos, num:p.num, team:'pool', inList:true};
     });
-    players.forEach(function(p,i){ p.num=i+1; });
     return {teamCount:3, nextId:id, players:players, teamNames:{A:'',B:'',C:''}, nextMatch:'19/07/2026'};
   }
 
@@ -258,11 +265,16 @@
   function load(cb){
     try{
       var raw = window.localStorage.getItem(STORE_KEY);
-      state = raw ? JSON.parse(raw) : freshState();
-    }catch(e){
-      state = freshState();
-    }
-    cb();
+      if(raw){ state = JSON.parse(raw); cb(); return; }
+    }catch(e){}
+    fetch(ROSTER_URL).then(function(r){ return r.json(); }).then(function(roster){
+      state = freshState(roster);
+      cb();
+    }).catch(function(){
+      // fetch fails when index.html is opened via file:// instead of served over http
+      state = freshState([]);
+      cb();
+    });
   }
 
   /* ---------- rendering ---------- */
@@ -275,13 +287,15 @@
   function playerHTML(p){
     var teams = activeTeams();
     var sc = skillColor(p.skill);
+    var inList = p.inList!==false;
     var mv = '<button class="mv aP'+(p.team==='pool'?' on':'')+'" data-move="'+p.id+'" data-team="pool" title="Disponível">D</button>';
     teams.forEach(function(t){
       mv += '<button class="mv a'+t+(p.team===t?' on':'')+'" data-move="'+p.id+'" data-team="'+t+'" title="Time '+t+'">'+t+'</button>';
     });
-    return '<div class="p" draggable="true" data-id="'+p.id+'">'+
+    return '<div class="p'+(inList?'':' off')+'" draggable="true" data-id="'+p.id+'">'+
       '<div class="p-top">'+
         '<span class="grip" draggable="false">⠿</span>'+
+        '<button class="listbtn'+(inList?' on':' off')+'" data-list="'+p.id+'" title="Na lista pro próximo jogo">'+(inList?'✓':'✕')+'</button>'+
         '<input class="name" draggable="false" data-name="'+p.id+'" value="'+esc(p.name)+'" spellcheck="false">'+
         '<input class="jnum" draggable="false" data-num="'+p.id+'" type="number" min="1" max="99" '+
           'value="'+(p.num||'')+'" title="Número da camisa" placeholder="Nº">'+
@@ -294,6 +308,12 @@
         '<div class="movebar">'+mv+'</div>'+
       '</div>'+
     '</div>';
+  }
+
+  function sortByList(list){
+    return list.slice().sort(function(a,b){
+      return (a.inList!==false?0:1)-(b.inList!==false?0:1);
+    });
   }
 
   function teamStats(t){
@@ -347,7 +367,7 @@
     document.getElementById('poolSub').textContent =
       pool.length + (pool.length===1?' jogador':' jogadores') + ' sem time';
     document.getElementById('poolList').innerHTML = pool.length
-      ? pool.map(playerHTML).join('')
+      ? sortByList(pool).map(playerHTML).join('')
       : '<div class="empty">Todos escalados 🎉</div>';
 
     // teams
@@ -363,11 +383,20 @@
             (s.count?s.avg.toFixed(1):'–')+'</div><div class="lbl">Média</div></div>'+
         '</div>'+
         pitchHTML(s.list)+
-        (s.list.length ? s.list.map(playerHTML).join('') : '<div class="empty">Arraste ou toque em '+t+' para escalar</div>')+
+        (s.list.length ? sortByList(s.list).map(playerHTML).join('') : '<div class="empty">Arraste ou toque em '+t+' para escalar</div>')+
       '</div>';
     }).join('');
 
     updateBalance();
+    updateListCount();
+  }
+
+  function updateListCount(){
+    var el = document.getElementById('listCount');
+    if(!el) return;
+    var total = state.players.length;
+    var on = state.players.filter(function(p){return p.inList!==false;}).length;
+    el.innerHTML = '<b>'+on+'</b> na lista'+(total?(' de '+total):'');
   }
 
   function updateBalance(){
@@ -396,7 +425,7 @@
     name=(name||'').trim(); if(!name) return;
     var usedNums={}; state.players.forEach(function(p){usedNums[p.num]=1;});
     var num=1; while(usedNums[num]) num++;
-    state.players.push({id:state.nextId++, name:name, skill:50, pos:'MEI', team:'pool', num:num});
+    state.players.push({id:state.nextId++, name:name, skill:50, pos:'MEI', team:'pool', num:num, inList:true});
     render(); save();
   }
 
@@ -478,6 +507,8 @@
       if(p){ p.team=t.getAttribute('data-team'); render(); save(); } }
     else if(t.matches('[data-del]')){ var id=+t.getAttribute('data-del');
       state.players=state.players.filter(function(x){return x.id!==id;}); render(); save(); }
+    else if(t.matches('[data-list]')){ var p5=byId(+t.getAttribute('data-list'));
+      if(p5){ p5.inList = p5.inList===false; render(); save(); } }
   });
   document.addEventListener('input', function(e){
     var t=e.target;
@@ -586,6 +617,7 @@
   load(function(){
     if(!state.teamNames) state.teamNames={A:'',B:'',C:''};
     if(!state.nextMatch) state.nextMatch='19/07/2026';
+    state.players.forEach(function(p){ if(p.inList===undefined) p.inList=true; });
     document.getElementById('nextMatch').value=state.nextMatch;
     setTeamCount(state.teamCount); render();
   });
